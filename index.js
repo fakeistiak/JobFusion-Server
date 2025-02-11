@@ -34,6 +34,7 @@ async function run() {
 
 
     const jobsCollection=client.db("jobsDB").collection("jobs");
+    const profileCollection=client.db("jobsDB").collection("profileInfo");
 
     app.get("/jobs",async(req,res)=>{
       const cursor=jobsCollection.find()
@@ -48,12 +49,28 @@ async function run() {
       res.send(job)
     })
 
+    app.get("/profileInfo", async (req, res) => {
+      const { userId } = req.query;
+      const profile = await profileCollection.findOne({ userId });
+      res.send(profile || {});
+    });
+
     app.post("/jobs",async(req,res)=>{
       const job=req.body;
       console.log("new job",job);
       const result=await jobsCollection.insertOne(job);
       res.send(result);
     })
+
+    app.post("/profileInfo", async (req, res) => {
+      const profile = req.body;
+      console.log("Updated Profile", profile);
+      const filter = { userId: profile.userId }; // Assuming each profile has a userId
+      const update = { $set: profile };
+      const options = { upsert: true }; // Insert if not found
+      const result = await profileCollection.updateOne(filter, update, options);
+      res.send(result);
+});
 
 
     // Send a ping to confirm a successful connection
