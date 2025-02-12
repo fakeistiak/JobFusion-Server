@@ -65,13 +65,12 @@ async function run() {
     app.post("/profileInfo", async (req, res) => {
       const profile = req.body;
       console.log("Updated Profile", profile);
-      const filter = { userId: profile.userId }; // Assuming each profile has a userId
+      const filter = { userId: profile.userId };
       const update = { $set: profile };
-      const options = { upsert: true }; // Insert if not found
+      const options = { upsert: true }; 
       const result = await profileCollection.updateOne(filter, update, options);
       res.send(result);
 });
-
 
     // Send a ping to confirm a successful connection
     // await client.db("admin").command({ ping: 1 });
