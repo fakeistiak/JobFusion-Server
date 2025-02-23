@@ -34,7 +34,6 @@ async function run() {
 
 
     const jobsCollection=client.db("jobsDB").collection("jobs");
-    const profileCollection=client.db("jobsDB").collection("profileInfo");
     const usersCollection=client.db("jobsDB").collection("users");
 
     app.get("/jobs",async(req,res)=>{
@@ -48,6 +47,13 @@ async function run() {
       const query={_id:new ObjectId(id)}
       const job =await jobsCollection.findOne(query)
       res.send(job)
+    })
+    
+    app.post("/jobs",async(req,res)=>{
+      const job=req.body;
+      console.log("new job",job);
+      const result=await jobsCollection.insertOne(job);
+      res.send(result);
     })
 
 
@@ -71,17 +77,9 @@ async function run() {
       res.send(result);
     });
     
-
-    app.post("/jobs",async(req,res)=>{
-      const job=req.body;
-      console.log("new job",job);
-      const result=await jobsCollection.insertOne(job);
-      res.send(result);
-    })
-
     app.post("/users",async(req,res)=>{
       const newUser=req.body;
-      console.log("new newUser",newUser);
+      console.log("new user",newUser);
       const result=await usersCollection.insertOne(newUser);
       res.send(result);
     })
