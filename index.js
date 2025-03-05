@@ -33,9 +33,13 @@ async function run() {
     await client.connect();
 
 
+    //Database Collections
     const jobsCollection=client.db("jobsDB").collection("jobs");
     const usersCollection=client.db("jobsDB").collection("users");
+    const jobApplicationCollection=client.db("jobsDB").collection("jobApplications");
 
+
+    //jobs api's
     app.get("/jobs",async(req,res)=>{
       const cursor=jobsCollection.find()
       const result=await cursor.toArray();
@@ -57,6 +61,7 @@ async function run() {
     })
 
 
+    //Users api's
     app.get("/users", async (req, res) => {
       const { email } = req.query;
       if (email) {
@@ -83,6 +88,38 @@ async function run() {
       const result=await usersCollection.insertOne(newUser);
       res.send(result);
     })
+
+
+    //job application api's
+    app.post('/jobApplication',async(req,res)=>{
+      const application=req.body;
+      const result=await jobApplicationCollection.insertOne(application);
+      res.send(result);
+    })
+
+    app.get('/jobApplication',async(req,res)=>{
+      const email=req.query.email;
+      const query={applicant_email:email};
+      const result=await jobApplicationCollection.find(query).toArray();
+
+      for(const application of result){
+        console.log(application.job_id);
+        const query2={_id: new ObjectId(application.job_id)}
+      const job=await jobsCollection.findOne(query2);
+      if(job){
+        application.job_title=job.job_title;
+        application.company_name=job.company_name;
+        application.remote_or_onsite=job.remote_or_onsite;
+        application.location=job.location;
+        application.salary=job.salary;
+        application.logo=job.logo;
+        application.job_type=job.job_type;
+      }
+      }
+
+      res.send(result);
+    })
+
 
     // Send a ping to confirm a successful connection
     // await client.db("admin").command({ ping: 1 });
