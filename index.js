@@ -1,13 +1,34 @@
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
+const multer = require("multer");
+const path = require("path");
+const fs = require("fs");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+
 const app = express();
 const port = process.env.PORT || 5000;
 
-// middleware
 app.use(cors());
 app.use(express.json());
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, 'uploads');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir);
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
+  }
+});
+
+const upload = multer({ storage });
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.m8c8ayj.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -23,11 +44,9 @@ async function run() {
   try {
     await client.connect();
 
-
     const jobsCollection = client.db("jobsDB").collection("jobs");
     const usersCollection = client.db("jobsDB").collection("users");
     const jobApplicationCollection = client.db("jobsDB").collection("jobApplications");
-
 
     app.get("/jobs", async (req, res) => {
       const cursor = jobsCollection.find();
@@ -55,13 +74,11 @@ async function run() {
         return res.status(403).send({ message: "Only admins can post jobs" });
       }
 
-
       delete job.userEmail;
 
       const result = await jobsCollection.insertOne(job);
       res.send(result);
     });
-
 
     app.get("/users", async (req, res) => {
       const { email } = req.query;
@@ -83,16 +100,26 @@ async function run() {
       res.send(result);
     });
 
-    app.post("/users", async (req, res) => {
-      const newUser = req.body;
+    // Added multer upload.single for photo handling
+    app.post("/users", upload.single('photo'), async (req, res) => {
+      try {
+        const newUser = req.body;
 
-      const exists = await usersCollection.findOne({ email: newUser.email });
-      if (exists) {
-        return res.status(409).send({ message: "User already exists" });
+        const exists = await usersCollection.findOne({ email: newUser.email });
+        if (exists) {
+          return res.status(409).send({ message: "User already exists" });
+        }
+
+        if (req.file) {
+          newUser.photoURL = `/uploads/${req.file.filename}`;
+        }
+
+        const result = await usersCollection.insertOne(newUser);
+        res.send(result);
+      } catch (error) {
+        console.error("Error in /users POST:", error);
+        res.status(500).send({ message: "Internal server error" });
       }
-
-      const result = await usersCollection.insertOne(newUser);
-      res.send(result);
     });
 
     app.post("/jobApplication", async (req, res) => {
@@ -125,12 +152,11 @@ async function run() {
 
     console.log("✅ Connected to MongoDB!");
   } finally {
-    // do not close client to keep connection for dev
+    // Do not close client connection for dev
   }
 }
 run().catch(console.dir);
 
-// Test Route
 app.get("/", (req, res) => {
   res.send("Server is running successfully");
 });
