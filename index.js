@@ -11,21 +11,21 @@ const port = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const uploadDir = path.join(__dirname, 'uploads');
+    const uploadDir = path.join(__dirname, "uploads");
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir);
     }
     cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
     const ext = path.extname(file.originalname);
-    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
-  }
+    cb(null, file.fieldname + "-" + uniqueSuffix + ext);
+  },
 });
 
 const upload = multer({ storage });
@@ -46,7 +46,9 @@ async function run() {
 
     const jobsCollection = client.db("jobsDB").collection("jobs");
     const usersCollection = client.db("jobsDB").collection("users");
-    const jobApplicationCollection = client.db("jobsDB").collection("jobApplications");
+    const jobApplicationCollection = client
+      .db("jobsDB")
+      .collection("jobApplications");
 
     app.get("/jobs", async (req, res) => {
       const cursor = jobsCollection.find();
@@ -63,7 +65,7 @@ async function run() {
 
     app.post("/jobs", async (req, res) => {
       const job = req.body;
-      const userEmail = job.userEmail; 
+      const userEmail = job.userEmail;
 
       if (!userEmail) {
         return res.status(401).send({ message: "User email required" });
@@ -101,7 +103,7 @@ async function run() {
     });
 
     // Added multer upload.single for photo handling
-    app.post("/users", upload.single('photo'), async (req, res) => {
+    app.post("/users", upload.single("photo"), async (req, res) => {
       try {
         const newUser = req.body;
 
@@ -148,6 +150,23 @@ async function run() {
       }
 
       res.send(result);
+    });
+
+    app.delete("/jobApplication/:id", async (req, res) => {
+      const id = req.params.id;
+      try {
+        const result = await jobApplicationCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
+        if (result.deletedCount === 1) {
+          res.send({ message: "Application deleted successfully" });
+        } else {
+          res.status(404).send({ message: "Application not found" });
+        }
+      } catch (error) {
+        console.error("Error deleting job application:", error);
+        res.status(500).send({ message: "Internal server error" });
+      }
     });
 
     console.log("✅ Connected to MongoDB!");
