@@ -56,12 +56,25 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/jobs/:id", async (req, res) => {
-      const id = req.params.id;
-      const query = { _id: new ObjectId(id) };
-      const job = await jobsCollection.findOne(query);
-      res.send(job);
-    });
+  app.get("/jobs/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).send({ error: "Invalid job ID" });
+    }
+
+    const job = await jobsCollection.findOne({ _id: new ObjectId(id) });
+
+    if (!job) {
+      return res.status(404).send({ error: "Job not found" });
+    }
+    res.send(job);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({ error: "Server error" });
+  }
+});
+
 
     app.post("/jobs", async (req, res) => {
       const job = req.body;
@@ -102,7 +115,6 @@ async function run() {
       res.send(result);
     });
 
-    // Added multer upload.single for photo handling
     app.post("/users", upload.single("photo"), async (req, res) => {
       try {
         const newUser = req.body;
