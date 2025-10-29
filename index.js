@@ -1,3 +1,4 @@
+
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
@@ -56,25 +57,24 @@ async function run() {
       res.send(result);
     });
 
-  app.get("/jobs/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-    if (!ObjectId.isValid(id)) {
-      return res.status(400).send({ error: "Invalid job ID" });
-    }
+    app.get("/jobs/:id", async (req, res) => {
+      try {
+        const { id } = req.params;
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).send({ error: "Invalid job ID" });
+        }
 
-    const job = await jobsCollection.findOne({ _id: new ObjectId(id) });
+        const job = await jobsCollection.findOne({ _id: new ObjectId(id) });
 
-    if (!job) {
-      return res.status(404).send({ error: "Job not found" });
-    }
-    res.send(job);
-  } catch (error) {
-    console.error(error);
-    res.status(500).send({ error: "Server error" });
-  }
-});
-
+        if (!job) {
+          return res.status(404).send({ error: "Job not found" });
+        }
+        res.send(job);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ error: "Server error" });
+      }
+    });
 
     app.post("/jobs", async (req, res) => {
       const job = req.body;
@@ -136,6 +136,23 @@ async function run() {
       }
     });
 
+    app.delete("/users/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await usersCollection.deleteOne({ _id: new ObjectId(id) });
+
+    if (result.deletedCount === 1) {
+      res.send({ message: "User deleted successfully" });
+    } else {
+      res.status(404).send({ message: "User not found" });
+    }
+  } catch (error) {
+    console.error("Error deleting user:", error);
+    res.status(500).send({ message: "Internal server error" });
+  }
+});
+
+
     app.post("/jobApplication", async (req, res) => {
       const application = req.body;
       const result = await jobApplicationCollection.insertOne(application);
@@ -143,26 +160,33 @@ async function run() {
     });
 
     app.get("/jobApplication", async (req, res) => {
-      const email = req.query.email;
-      const query = { applicant_email: email };
-      const result = await jobApplicationCollection.find(query).toArray();
+  const email = req.query.email;
+  let query = {};
 
-      for (const application of result) {
-        const jobQuery = { _id: new ObjectId(application.job_id) };
-        const job = await jobsCollection.findOne(jobQuery);
-        if (job) {
-          application.job_title = job.job_title;
-          application.company_name = job.company_name;
-          application.remote_or_onsite = job.remote_or_onsite;
-          application.location = job.location;
-          application.salary = job.salary;
-          application.logo = job.logo;
-          application.job_type = job.job_type;
-        }
-      }
+  if (email) {
+    // If email is provided, filter by applicant_email
+    query = { applicant_email: email };
+  }
 
-      res.send(result);
-    });
+  const result = await jobApplicationCollection.find(query).toArray();
+
+  for (const application of result) {
+    const jobQuery = { _id: new ObjectId(application.job_id) };
+    const job = await jobsCollection.findOne(jobQuery);
+    if (job) {
+      application.job_title = job.job_title;
+      application.company_name = job.company_name;
+      application.remote_or_onsite = job.remote_or_onsite;
+      application.location = job.location;
+      application.salary = job.salary;
+      application.logo = job.logo;
+      application.job_type = job.job_type;
+    }
+  }
+
+  res.send(result);
+});
+
 
     app.delete("/jobApplication/:id", async (req, res) => {
       const id = req.params.id;
