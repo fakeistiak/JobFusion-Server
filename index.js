@@ -1,38 +1,28 @@
-
+// index.js
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
 const multer = require("multer");
 const path = require("path");
-const fs = require("fs");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 const app = express();
 const port = process.env.PORT || 5000;
 
-app.use(cors());
+// ---------------------
+// CORS: allow only your frontend
+// ---------------------
+app.use(cors({
+  origin: "https://job-fusion-ten.vercel.app", // replace with your frontend domain
+  methods: ["GET", "POST", "PUT", "DELETE"],
+}));
+
 app.use(express.json());
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = path.join(__dirname, "uploads");
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir);
-    }
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    const ext = path.extname(file.originalname);
-    cb(null, file.fieldname + "-" + uniqueSuffix + ext);
-  },
-});
-
-const upload = multer({ storage });
-
-const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.m8c8ayj.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
-
+// ---------------------
+// MongoDB setup
+// ---------------------
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.m8c8ayj.mongodb.net/?retryWrites=true&w=majority`;
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -44,178 +34,154 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     await client.connect();
+    const db = client.db("jobsDB");
+    const jobsCollection = db.collection("jobs");
+    const usersCollection = db.collection("users");
+    const applicationsCollection = db.collection("jobApplications");
 
-    const jobsCollection = client.db("jobsDB").collection("jobs");
-    const usersCollection = client.db("jobsDB").collection("users");
-    const jobApplicationCollection = client
-      .db("jobsDB")
-      .collection("jobApplications");
-
+    // ---------------------
+    // JOB ROUTES
+    // ---------------------
     app.get("/jobs", async (req, res) => {
-      const cursor = jobsCollection.find();
-      const result = await cursor.toArray();
-      res.send(result);
+      const jobs = await jobsCollection.find().toArray();
+      res.json(jobs);
     });
 
     app.get("/jobs/:id", async (req, res) => {
-      try {
-        const { id } = req.params;
-        if (!ObjectId.isValid(id)) {
-          return res.status(400).send({ error: "Invalid job ID" });
-        }
+      const { id } = req.params;
+      if (!ObjectId.isValid(id)) return res.status(400).json({ error: "Invalid ID" });
 
-        const job = await jobsCollection.findOne({ _id: new ObjectId(id) });
+      const job = await jobsCollection.findOne({ _id: new ObjectId(id) });
+      if (!job) return res.status(404).json({ error: "Job not found" });
 
-        if (!job) {
-          return res.status(404).send({ error: "Job not found" });
-        }
-        res.send(job);
-      } catch (error) {
-        console.error(error);
-        res.status(500).send({ error: "Server error" });
-      }
+      res.json(job);
     });
 
     app.post("/jobs", async (req, res) => {
       const job = req.body;
-      const userEmail = job.userEmail;
+      if (!job.userEmail) return res.status(401).json({ message: "User email required" });
 
-      if (!userEmail) {
-        return res.status(401).send({ message: "User email required" });
-      }
-
-      const user = await usersCollection.findOne({ email: userEmail });
-      if (!user || user.role !== "admin") {
-        return res.status(403).send({ message: "Only admins can post jobs" });
-      }
+      const user = await usersCollection.findOne({ email: job.userEmail });
+      if (!user || user.role !== "admin") return res.status(403).json({ message: "Only admins can post jobs" });
 
       delete job.userEmail;
-
       const result = await jobsCollection.insertOne(job);
-      res.send(result);
+      res.json(result);
     });
 
+    // ---------------------
+    // USERS ROUTES
+    // ---------------------
     app.get("/users", async (req, res) => {
       const { email } = req.query;
       if (email) {
         const user = await usersCollection.findOne({ email });
-        res.send(user || {});
-      } else {
-        const result = await usersCollection.find().toArray();
-        res.send(result);
+        return res.json(user || {});
       }
+      const users = await usersCollection.find().toArray();
+      res.json(users);
     });
 
     app.put("/users", async (req, res) => {
       const { email, ...updatedProfile } = req.body;
-      const filter = { email };
-      const update = { $set: updatedProfile };
-      const options = { upsert: true };
-      const result = await usersCollection.updateOne(filter, update, options);
-      res.send(result);
+      const result = await usersCollection.updateOne(
+        { email },
+        { $set: updatedProfile },
+        { upsert: true }
+      );
+      res.json(result);
     });
+
+    // ---------------------
+    // Multer setup (serverless-safe)
+    // ---------------------
+    const upload = multer({ storage: multer.memoryStorage() });
 
     app.post("/users", upload.single("photo"), async (req, res) => {
       try {
         const newUser = req.body;
 
         const exists = await usersCollection.findOne({ email: newUser.email });
-        if (exists) {
-          return res.status(409).send({ message: "User already exists" });
-        }
+        if (exists) return res.status(409).json({ message: "User already exists" });
 
-        if (req.file) {
-          newUser.photoURL = `/uploads/${req.file.filename}`;
-        }
+        if (req.file) newUser.photoURL = `Uploaded file received: ${req.file.originalname}`;
 
         const result = await usersCollection.insertOne(newUser);
-        res.send(result);
-      } catch (error) {
-        console.error("Error in /users POST:", error);
-        res.status(500).send({ message: "Internal server error" });
+        res.json(result);
+      } catch (err) {
+        console.error("Error in /users POST:", err);
+        res.status(500).json({ message: "Internal server error" });
       }
     });
 
     app.delete("/users/:id", async (req, res) => {
-  const { id } = req.params;
-  try {
-    const result = await usersCollection.deleteOne({ _id: new ObjectId(id) });
-
-    if (result.deletedCount === 1) {
-      res.send({ message: "User deleted successfully" });
-    } else {
-      res.status(404).send({ message: "User not found" });
-    }
-  } catch (error) {
-    console.error("Error deleting user:", error);
-    res.status(500).send({ message: "Internal server error" });
-  }
-});
-
-
-    app.post("/jobApplication", async (req, res) => {
-      const application = req.body;
-      const result = await jobApplicationCollection.insertOne(application);
-      res.send(result);
-    });
-
-    app.get("/jobApplication", async (req, res) => {
-  const email = req.query.email;
-  let query = {};
-
-  if (email) {
-    // If email is provided, filter by applicant_email
-    query = { applicant_email: email };
-  }
-
-  const result = await jobApplicationCollection.find(query).toArray();
-
-  for (const application of result) {
-    const jobQuery = { _id: new ObjectId(application.job_id) };
-    const job = await jobsCollection.findOne(jobQuery);
-    if (job) {
-      application.job_title = job.job_title;
-      application.company_name = job.company_name;
-      application.remote_or_onsite = job.remote_or_onsite;
-      application.location = job.location;
-      application.salary = job.salary;
-      application.logo = job.logo;
-      application.job_type = job.job_type;
-    }
-  }
-
-  res.send(result);
-});
-
-
-    app.delete("/jobApplication/:id", async (req, res) => {
-      const id = req.params.id;
+      const { id } = req.params;
       try {
-        const result = await jobApplicationCollection.deleteOne({
-          _id: new ObjectId(id),
-        });
-        if (result.deletedCount === 1) {
-          res.send({ message: "Application deleted successfully" });
-        } else {
-          res.status(404).send({ message: "Application not found" });
-        }
-      } catch (error) {
-        console.error("Error deleting job application:", error);
-        res.status(500).send({ message: "Internal server error" });
+        const result = await usersCollection.deleteOne({ _id: new ObjectId(id) });
+        if (result.deletedCount === 1) res.json({ message: "User deleted successfully" });
+        else res.status(404).json({ message: "User not found" });
+      } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Internal server error" });
       }
     });
 
-    console.log("✅ Connected to MongoDB!");
+    // ---------------------
+    // JOB APPLICATION ROUTES
+    // ---------------------
+    app.post("/jobApplication", async (req, res) => {
+      const application = req.body;
+      const result = await applicationsCollection.insertOne(application);
+      res.json(result);
+    });
+
+    app.get("/jobApplication", async (req, res) => {
+      const { email } = req.query;
+      let query = {};
+      if (email) query = { applicant_email: email };
+
+      const applications = await applicationsCollection.find(query).toArray();
+
+      // Attach job info
+      for (const appItem of applications) {
+        const job = await jobsCollection.findOne({ _id: new ObjectId(appItem.job_id) });
+        if (job) {
+          appItem.job_title = job.job_title;
+          appItem.company_name = job.company_name;
+          appItem.location = job.location;
+          appItem.salary = job.salary;
+          appItem.job_type = job.job_type;
+        }
+      }
+
+      res.json(applications);
+    });
+
+    app.delete("/jobApplication/:id", async (req, res) => {
+      const { id } = req.params;
+      try {
+        const result = await applicationsCollection.deleteOne({ _id: new ObjectId(id) });
+        if (result.deletedCount === 1) res.json({ message: "Application deleted successfully" });
+        else res.status(404).json({ message: "Application not found" });
+      } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Internal server error" });
+      }
+    });
+
+    console.log("✅ MongoDB connected");
   } finally {
-    // Do not close client connection for dev
+    // keep connection alive for serverless
   }
 }
+
 run().catch(console.dir);
 
-app.get("/", (req, res) => {
-  res.send("Server is running successfully");
-});
+app.get("/", (req, res) => res.send("Server is running successfully"));
 
+// ---------------------
+// Export for Vercel
+// ---------------------
 module.exports = app;
 
 app.listen(port, () => {
