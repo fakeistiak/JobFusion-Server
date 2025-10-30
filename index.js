@@ -9,12 +9,8 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
 const port = process.env.PORT || 5000;
 
-app.use(cors({
-  origin: [
-    "https://job-fusion-ten.vercel.app", // production
-    "http://localhost:5173",             // local frontend port
-    "http://localhost:3000"              // optional CRA port
-  ],
+pp.use(cors({
+  origin: "https://job-fusion-ten.vercel.app", // replace with your frontend domain
   methods: ["GET", "POST", "PUT", "DELETE"],
 }));
 
