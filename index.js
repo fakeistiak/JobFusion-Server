@@ -1,7 +1,7 @@
 // index.js
+require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-require("dotenv").config();
 const multer = require("multer");
 const path = require("path");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
@@ -9,19 +9,19 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
 const port = process.env.PORT || 5000;
 
-// ---------------------
-// CORS: allow only your frontend
-// ---------------------
 app.use(cors({
-  origin: "https://job-fusion-ten.vercel.app", // replace with your frontend domain
+  origin: [
+    "https://job-fusion-ten.vercel.app", // production
+    "http://localhost:5173",             // local frontend port
+    "http://localhost:3000"              // optional CRA port
+  ],
   methods: ["GET", "POST", "PUT", "DELETE"],
 }));
 
+
 app.use(express.json());
 
-// ---------------------
-// MongoDB setup
-// ---------------------
+
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.m8c8ayj.mongodb.net/?retryWrites=true&w=majority`;
 const client = new MongoClient(uri, {
   serverApi: {
@@ -39,9 +39,7 @@ async function run() {
     const usersCollection = db.collection("users");
     const applicationsCollection = db.collection("jobApplications");
 
-    // ---------------------
-    // JOB ROUTES
-    // ---------------------
+ 
     app.get("/jobs", async (req, res) => {
       const jobs = await jobsCollection.find().toArray();
       res.json(jobs);
@@ -69,9 +67,6 @@ async function run() {
       res.json(result);
     });
 
-    // ---------------------
-    // USERS ROUTES
-    // ---------------------
     app.get("/users", async (req, res) => {
       const { email } = req.query;
       if (email) {
@@ -92,9 +87,7 @@ async function run() {
       res.json(result);
     });
 
-    // ---------------------
-    // Multer setup (serverless-safe)
-    // ---------------------
+
     const upload = multer({ storage: multer.memoryStorage() });
 
     app.post("/users", upload.single("photo"), async (req, res) => {
@@ -126,9 +119,7 @@ async function run() {
       }
     });
 
-    // ---------------------
     // JOB APPLICATION ROUTES
-    // ---------------------
     app.post("/jobApplication", async (req, res) => {
       const application = req.body;
       const result = await applicationsCollection.insertOne(application);
@@ -179,9 +170,7 @@ run().catch(console.dir);
 
 app.get("/", (req, res) => res.send("Server is running successfully"));
 
-// ---------------------
-// Export for Vercel
-// ---------------------
+
 module.exports = app;
 
 app.listen(port, () => {
