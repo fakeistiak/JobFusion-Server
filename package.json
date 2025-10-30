@@ -1,14 +1,13 @@
 {
   "name": "jobfusion-server",
   "version": "1.0.0",
-  "description": "",
+  "description": "Backend for JobFusion app",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index.js"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": ["express", "mongodb", "nodejs", "vercel"],
+  "author": "Your Name",
   "license": "ISC",
   "dependencies": {
     "cors": "^2.8.5",
