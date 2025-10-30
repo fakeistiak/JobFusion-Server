@@ -1,9 +1,12 @@
 {
   "version": 2,
   "builds": [
-    { "src": "JobFusion-Server/index.js", "use": "@vercel/node" }
+    {
+      "src": "index.js",
+      "use": "@vercel/node"
+    }
   ],
   "routes": [
-    { "src": "/(.*)", "dest": "JobFusion-Server/index.js" }
+    { "src": "/(.*)", "dest": "/index.js" }
   ]
 }
