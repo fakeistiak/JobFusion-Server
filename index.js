@@ -1,7 +1,5 @@
 require("dotenv").config();
 const express = require("express");
-const http = require("http");
-const { Server } = require("socket.io");
 const cors = require("cors");
 const multer = require("multer");
 const path = require("path");
@@ -25,45 +23,6 @@ app.use(
 
 app.use(express.json());
 app.use("/uploads", express.static(uploadsDir));
-
-const server = http.createServer(app);
-
-const io = new Server(server, {
-  cors: {
-    origin: ["http://localhost:5173", "http://localhost:5000"],
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
-  },
-});
-
-const onlineUsers = {};
-
-io.on("connection", (socket) => {
-  console.log("Socket connected:", socket.id);
-
-  socket.on("register", (email) => {
-    if (email) {
-      onlineUsers[email] = socket.id;
-      console.log(`Socket registered: ${email} -> ${socket.id}`);
-    }
-  });
-
-  socket.on("disconnect", () => {
-    for (const email in onlineUsers) {
-      if (onlineUsers[email] === socket.id) {
-        delete onlineUsers[email];
-        console.log(`Socket disconnected: ${email}`);
-        break;
-      }
-    }
-  });
-});
-
-function emitToUser(email, event, data) {
-  const socketId = onlineUsers[email];
-  if (socketId) {
-    io.to(socketId).emit(event, data);
-  }
-}
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.hch7r.mongodb.net/?appName=Cluster0`;
 const client = new MongoClient(uri, {
@@ -100,8 +59,7 @@ async function run() {
     async function notifyAllAdmins(message, type, relatedId, link) {
       const admins = await usersCollection.find({ role: "admin" }).toArray();
       for (const admin of admins) {
-        const notif = await createNotification(admin.email, message, type, relatedId, link);
-        emitToUser(admin.email, "newNotification", notif);
+        await createNotification(admin.email, message, type, relatedId, link);
       }
     }
 
@@ -178,11 +136,34 @@ async function run() {
           const msg = status === "approved"
             ? `Your job "${job.job_title}" has been approved and is now live.`
             : `Your job "${job.job_title}" has been rejected.`;
-          const notif = await createNotification(job.postedBy, msg, `job_${status}`, id, "/recruiterDashboard");
-          emitToUser(job.postedBy, "newNotification", notif);
+          await createNotification(job.postedBy, msg, `job_${status}`, id, "/recruiterDashboard");
         }
 
         res.json({ message: `Job ${status} successfully` });
+      } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Internal server error" });
+      }
+    });
+
+    app.delete("/jobs/:id", async (req, res) => {
+      const { id } = req.params;
+      const { email } = req.body;
+
+      if (!ObjectId.isValid(id))
+        return res.status(400).json({ message: "Invalid ID" });
+
+      try {
+        const job = await jobsCollection.findOne({ _id: new ObjectId(id) });
+        if (!job)
+          return res.status(404).json({ message: "Job not found" });
+        if (job.postedBy !== email)
+          return res.status(403).json({ message: "You can only delete your own jobs" });
+
+        await jobsCollection.deleteOne({ _id: new ObjectId(id) });
+        await applicationsCollection.deleteMany({ job_id: id });
+
+        res.json({ message: "Job deleted successfully" });
       } catch (err) {
         console.error(err);
         res.status(500).json({ message: "Internal server error" });
@@ -345,38 +326,13 @@ async function run() {
           _id: new ObjectId(application.job_id),
         });
         if (job && job.postedBy) {
-          const notif = await createNotification(
+          await createNotification(
             job.postedBy,
             `A new candidate applied for "${job.job_title}".`,
             "new_application",
             application.job_id,
             "/recruiterDashboard",
           );
-          emitToUser(job.postedBy, "newNotification", notif);
-
-          // Emit full applicant data for real-time UI update
-          emitToUser(job.postedBy, "newApplicant", {
-            _id: result.insertedId.toString(),
-            job_id: application.job_id,
-            applicant_email: application.applicant_email,
-            name: application.name,
-            phone: application.phone,
-            education: application.education,
-            linkedIn: application.linkedIn,
-            github: application.github,
-            portfolio: application.portfolio,
-            resume: application.resume,
-            coverLetter: application.coverLetter,
-            photoURL: application.photoURL,
-            salaryExpectation: application.salaryExpectation,
-            status: "pending",
-            appliedAt: application.appliedAt || new Date().toISOString(),
-            job_title: job.job_title,
-            company_name: job.company_name,
-            location: job.location,
-            salary: job.salary,
-            job_type: job.job_type,
-          });
         }
       }
 
@@ -481,16 +437,8 @@ async function run() {
             type = "application_reviewing";
           }
           if (msg) {
-            const notif = await createNotification(application.applicant_email, msg, type, application.job_id, "/appliedJobs");
-            emitToUser(application.applicant_email, "newNotification", notif);
+            await createNotification(application.applicant_email, msg, type, application.job_id, "/appliedJobs");
           }
-
-          emitToUser(application.applicant_email, "applicationStatusUpdate", {
-            applicationId: id,
-            status,
-            interviewDate: updateFields.interviewDate || null,
-            interviewMessage: updateFields.interviewMessage || "",
-          });
         }
 
         res.json({ message: `Application ${status} successfully` });
@@ -560,6 +508,6 @@ app.get("/", (req, res) => res.send("Server is running successfully"));
 
 module.exports = app;
 
-server.listen(port, () => {
+app.listen(port, () => {
   console.log(`Server running on PORT: ${port}`);
 });
