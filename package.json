@@ -6,7 +6,12 @@
   "scripts": {
     "start": "node index.js"
   },
-  "keywords": ["express", "mongodb", "nodejs", "vercel"],
+  "keywords": [
+    "express",
+    "mongodb",
+    "nodejs",
+    "vercel"
+  ],
   "author": "Your Name",
   "license": "ISC",
   "dependencies": {
@@ -14,6 +19,7 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "mongodb": "^6.13.0",
-    "multer": "^2.0.1"
+    "multer": "^2.0.1",
+    "socket.io": "^4.8.3"
   }
 }
